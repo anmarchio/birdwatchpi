@@ -1,5 +1,6 @@
 # BirdWatchPi
 
+This is a Raspberry PI based project for AI-assisted bird watching.
 
 ## Preparations
 
