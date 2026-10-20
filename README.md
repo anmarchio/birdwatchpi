@@ -4,7 +4,7 @@ This is a Raspberry PI based project for AI-assisted bird watching.
 
 ## Preparations
 
-### Option A (recommended): reinstall a current OS
+### Option A (recommended): install a current Raspberry OS
 
 Buster has been end-of-life for a while, so its package repositories may give you trouble, and newer Python wheels won’t install. A fresh Raspberry Pi OS Bookworm (Lite or Desktop) on the Pi 3 takes about 15 minutes. After that, everything in my first walkthrough applies unchanged, using birdwatch.py. If you don’t have anything valuable on the SD card, I’d do this.
 
