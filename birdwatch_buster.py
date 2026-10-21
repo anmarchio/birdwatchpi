@@ -44,12 +44,17 @@ def load_interpreter(path):
 
 
 def load_coco_bird_id(path):
-    """Find the class id for 'bird' in the labels file (format: '<id> <name>')."""
-    for line in path.read_text().splitlines():
-        m = re.match(r"\s*(\d+)\s+(.+)", line)
-        if m and m.group(2).strip() == "bird":
-            return int(m.group(1))
-    raise RuntimeError("'bird' not found in coco labels")
+    """Find the class id for 'bird'. Handles '<id> <name>' lines and plain name lines."""
+    for i, line in enumerate(path.read_text().splitlines()):
+        line = line.strip()
+        m = re.match(r"(\d+)\s+(.+)", line)
+        if m:
+            idx, name = int(m.group(1)), m.group(2).strip()
+        else:
+            idx, name = i, line
+        if name.lower() == "bird":
+            return idx
+    raise RuntimeError("'bird' not found in coco labels, check the file contents")
 
 
 def load_labels(path):
