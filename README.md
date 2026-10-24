@@ -2,6 +2,32 @@
 
 This is a Raspberry PI based project for AI-assisted bird watching.
 
+## Running locally without a Pi camera
+
+`birdwatch.py` processes image files by default and does not require `picamera2`.
+Put images in `birds/to_process` (JPEG, PNG, GIF, BMP, or WebP), then run:
+
+```bash
+python birdwatch.py
+```
+
+Download the model files required by the detector and bird classifier into
+`~/birdwatch/models` (the default):
+
+```bash
+mkdir -p ~/birdwatch/models
+cd ~/birdwatch/models
+curl -fLO https://raw.githubusercontent.com/google-coral/test_data/master/ssd_mobilenet_v2_coco_quant_postprocess.tflite
+curl -fLO https://raw.githubusercontent.com/google-coral/test_data/master/coco_labels.txt
+curl -fLO https://raw.githubusercontent.com/google-coral/test_data/master/mobilenet_v2_1.0_224_inat_bird_quant.tflite
+curl -fLO https://raw.githubusercontent.com/google-coral/test_data/master/inat_bird_labels.txt
+```
+
+Then run `python birdwatch.py`. Use `--model-dir` if you keep the files
+elsewhere, or `--input-dir` and `--output-dir` to select other folders.
+Camera capture remains available on a Raspberry Pi with `picamera2` installed
+by running `python birdwatch.py --camera`.
+
 ## Preparations
 
 ### Option A (recommended): install a current Raspberry OS
@@ -53,3 +79,11 @@ You can’t use rpicam-* commands, only raspistill / raspivid.
 If the script errors on the tflite_runtime import, the install in step 2 didn’t succeed. Send me the error and I’ll help.
 
 Which option do you want to go with? If you tell me your Python version (python3 --version) after trying Option B, I can pin the right tflite-runtime wheel for you.
+
+## Testing
+
+Run tests:
+
+```bash
+.venv/bin/python -m unittest tests.test_birdwatch -v
+```

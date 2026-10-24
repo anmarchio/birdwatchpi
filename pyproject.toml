@@ -1,0 +1,9 @@
+[project]
+name = "birdwatchpi"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "ai-edge-litert>=2.3.0",
+    "numpy>=2.5.4",
+    "pillow>=13.0.0",
+]
