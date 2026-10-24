@@ -2,6 +2,15 @@
 
 This is a Raspberry PI based project for AI-assisted bird watching.
 
+## Setup
+
+Prerequisites:
+* make sure uv is installed in your system: `sudo apt install uv`
+
+Proceed:
+* get packages: `uv sync`
+* run the project: `uv run`
+
 ## Running locally without a Pi camera
 
 `birdwatch.py` processes image files by default and does not require `picamera2`.
