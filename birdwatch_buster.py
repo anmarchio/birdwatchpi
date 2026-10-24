@@ -4,9 +4,8 @@ Raspberry Pi bird watcher.
 Stage 1: SSD MobileNet (COCO) finds "bird" boxes in the camera frame.
 Stage 2: iNaturalist MobileNet classifies the cropped bird into a species.
 Buster / legacy-camera version (picamera, Python 3.7).
-Saves crop + species + timestamp to ~/birds and logs to detections.csv.
+Saves detected bird crops and records to an SQLite database in ~/birds.
 """
-import csv
 import re
 import time
 from datetime import datetime
@@ -17,6 +16,7 @@ from PIL import Image
 import io
 import picamera
 
+from bird_data import initialize_database, record_detection
 from tflite_runtime.interpreter import Interpreter
 
 # ---------------- configuration ----------------
@@ -119,8 +119,12 @@ def main():
     species_labels = load_labels(CLASSIFIER_LABELS)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = OUT_DIR / "detections.csv"
-    new_log = not log_path.exists()
+    database_path = OUT_DIR / "detections.sqlite3"
+    initialize_database(
+        database_path,
+        legacy_csv_path=OUT_DIR / "detections.csv",
+        output_dir=OUT_DIR,
+    )
     last_seen = {}
 
     cam = picamera.PiCamera(resolution=FRAME_SIZE)
@@ -128,45 +132,44 @@ def main():
     buf = io.BytesIO()
     print("Bird watcher running. Ctrl+C to stop.")
 
-    with open(log_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        if new_log:
-            writer.writerow(["timestamp", "species", "species_conf",
-                             "detect_conf", "file"])
-        try:
-            while True:
-                buf.seek(0)
-                buf.truncate()
-                cam.capture(buf, format="jpeg")
-                buf.seek(0)
-                img = Image.open(buf).convert("RGB")
-                for det_score, box in run_detector(detector, img):
-                    crop = img.crop(pad_box(box, img.size, CROP_PADDING))
-                    species, conf = classify_species(
-                        classifier, species_labels, crop)
-                    if conf < SPECIES_THRESHOLD:
-                        species = "unknown"
+    try:
+        while True:
+            buf.seek(0)
+            buf.truncate()
+            cam.capture(buf, format="jpeg")
+            buf.seek(0)
+            img = Image.open(buf).convert("RGB")
+            for det_score, box in run_detector(detector, img):
+                crop = img.crop(pad_box(box, img.size, CROP_PADDING))
+                species, conf = classify_species(
+                    classifier, species_labels, crop)
+                if conf < SPECIES_THRESHOLD:
+                    species = "unknown"
 
-                    now = datetime.now()
-                    if now.timestamp() - last_seen.get(species, 0) < COOLDOWN_SECONDS:
-                        continue
-                    last_seen[species] = now.timestamp()
+                now = datetime.now()
+                if now.timestamp() - last_seen.get(species, 0) < COOLDOWN_SECONDS:
+                    continue
+                last_seen[species] = now.timestamp()
 
-                    day_dir = OUT_DIR / now.strftime("%Y-%m-%d")
-                    day_dir.mkdir(exist_ok=True)
-                    name = f"{now:%H%M%S}_{safe_name(species)}_{conf:.2f}.jpg"
-                    path = day_dir / name
-                    crop.save(path, quality=92)
-                    writer.writerow([now.isoformat(timespec="seconds"),
-                                     species, f"{conf:.2f}",
-                                     f"{det_score:.2f}", str(path)])
-                    f.flush()
-                    print(f"{now:%H:%M:%S}  {species} ({conf:.0%})  -> {path}")
-                time.sleep(LOOP_DELAY)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            cam.close()
+                day_dir = OUT_DIR / now.strftime("%Y-%m-%d")
+                day_dir.mkdir(exist_ok=True)
+                name = f"{now:%H%M%S}_{safe_name(species)}_{conf:.2f}.jpg"
+                path = day_dir / name
+                crop.save(path, quality=92)
+                record_detection(
+                    database_path,
+                    now.isoformat(timespec="seconds"),
+                    species,
+                    conf,
+                    det_score,
+                    path.relative_to(OUT_DIR).as_posix(),
+                )
+                print(f"{now:%H:%M:%S}  {species} ({conf:.0%})  -> {path}")
+            time.sleep(LOOP_DELAY)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cam.close()
 
 
 if __name__ == "__main__":

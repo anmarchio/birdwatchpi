@@ -37,6 +37,42 @@ elsewhere, or `--input-dir` and `--output-dir` to select other folders.
 Camera capture remains available on a Raspberry Pi with `picamera2` installed
 by running `python birdwatch.py --camera`.
 
+Detections are stored in `birds/detections.sqlite3` alongside the saved crops.
+The first run imports existing records from `birds/detections.csv` once, if
+that file exists.
+
+## Viewing detections
+
+Start the local webpage with:
+
+```bash
+uv run python birdwatch_web.py
+```
+
+Open <http://127.0.0.1:8000>. To view it from another device on the same trusted
+network, bind to the Pi's network interfaces and open the Pi's address instead:
+
+```bash
+uv run python birdwatch_web.py --host 0.0.0.0
+```
+
+The web server has no authentication; do not expose it to an untrusted network.
+The Buster camera script stores data in `~/birds`; to view that database, run
+the webpage with `--output-dir ~/birds`.
+The detection list can be filtered by species name and inclusive start/end
+dates. Click a thumbnail to open its full-size crop in a new tab.
+
+On Linux, start the camera detection loop and webpage together with:
+
+```bash
+./start_birdwatch.sh
+```
+
+The launcher prepares the database, starts both processes, and stops both when
+you press Ctrl+C. Set `BIRDWATCH_WEB_HOST=0.0.0.0` to make the webpage available
+on the local network, or set `BIRDWATCH_OUTPUT_DIR` to change the image and
+database directory.
+
 ## Preparations
 
 ### Option A (recommended): install a current Raspberry OS

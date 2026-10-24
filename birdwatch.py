@@ -3,10 +3,9 @@
 Bird watcher.
 Stage 1: SSD MobileNet (COCO) finds "bird" boxes in the camera frame.
 Stage 2: iNaturalist MobileNet classifies the cropped bird into a species.
-Saves crop + species + timestamp to ~/birds and logs to detections.csv.
+Saves detected bird crops and records to an SQLite database.
 """
 import argparse
-import csv
 import re
 import time
 from datetime import datetime
@@ -14,6 +13,8 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+
+from bird_data import initialize_database, record_detection
 
 try:
     from tflite_runtime.interpreter import Interpreter
@@ -129,12 +130,11 @@ def safe_name(s):
 
 
 def process_frame(frame,
-                  f,
+                  database_path,
                   detector,
                   classifier,
                   species_labels,
                   last_seen,
-                  writer,
                   out_dir=OUT_DIR):
     img = Image.fromarray(frame)
     for det_score, box in run_detector(detector, img):
@@ -154,10 +154,14 @@ def process_frame(frame,
         name = f"{now:%H%M%S}_{safe_name(species)}_{conf:.2f}.jpg"
         path = day_dir / name
         crop.save(path, quality=92)
-        writer.writerow([now.isoformat(timespec="seconds"),
-                         species, f"{conf:.2f}",
-                         f"{det_score:.2f}", str(path)])
-        f.flush()
+        record_detection(
+            database_path,
+            now.isoformat(timespec="seconds"),
+            species,
+            conf,
+            det_score,
+            path.relative_to(out_dir).as_posix(),
+        )
         print(f"{now:%H:%M:%S}  {species} ({conf:.0%})  -> {path}")
 
 
@@ -172,8 +176,12 @@ def camera_detect_loop(model_dir=MODEL_DIR, out_dir=OUT_DIR):
     species_labels = load_labels(model_dir / CLASSIFIER_LABELS.name)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    log_path = out_dir / "detections.csv"
-    new_log = not log_path.exists()
+    database_path = out_dir / "detections.sqlite3"
+    initialize_database(
+        database_path,
+        legacy_csv_path=out_dir / "detections.csv",
+        output_dir=out_dir,
+    )
     last_seen = {}
 
     cam = Picamera2()
@@ -183,21 +191,16 @@ def camera_detect_loop(model_dir=MODEL_DIR, out_dir=OUT_DIR):
     time.sleep(2)  # let auto-exposure settle
     print("Bird watcher running. Ctrl+C to stop.")
 
-    with open(log_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        if new_log:
-            writer.writerow(["timestamp", "species", "species_conf",
-                             "detect_conf", "file"])
-        try:
-            while True:
-                frame = cam.capture_array()          # numpy HxWx3
-                process_frame(frame, f, detector, classifier, species_labels,
-                              last_seen, writer, out_dir)
-                time.sleep(LOOP_DELAY)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            cam.stop()
+    try:
+        while True:
+            frame = cam.capture_array()          # numpy HxWx3
+            process_frame(frame, database_path, detector, classifier,
+                          species_labels, last_seen, out_dir)
+            time.sleep(LOOP_DELAY)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cam.stop()
 
 
 def folder_detect_loop(img_folder, model_dir=MODEL_DIR, out_dir=OUT_DIR):
@@ -212,8 +215,12 @@ def folder_detect_loop(img_folder, model_dir=MODEL_DIR, out_dir=OUT_DIR):
     species_labels = load_labels(model_dir / CLASSIFIER_LABELS.name)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    log_path = out_dir / "detections.csv"
-    new_log = not log_path.exists()
+    database_path = out_dir / "detections.sqlite3"
+    initialize_database(
+        database_path,
+        legacy_csv_path=out_dir / "detections.csv",
+        output_dir=out_dir,
+    )
     last_seen = {}
 
     images = sorted(
@@ -225,16 +232,11 @@ def folder_detect_loop(img_folder, model_dir=MODEL_DIR, out_dir=OUT_DIR):
         return
     print(f"Processing {len(images)} images in {img_folder}.")
 
-    with open(log_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        if new_log:
-            writer.writerow(["timestamp", "species", "species_conf",
-                             "detect_conf", "file"])
-        for img_path in images:
-            with Image.open(img_path) as image:
-                frame = np.asarray(image.convert("RGB"))
-            process_frame(frame, f, detector, classifier, species_labels,
-                          last_seen, writer, out_dir)
+    for img_path in images:
+        with Image.open(img_path) as image:
+            frame = np.asarray(image.convert("RGB"))
+        process_frame(frame, database_path, detector, classifier,
+                      species_labels, last_seen, out_dir)
 
 
 def main():
